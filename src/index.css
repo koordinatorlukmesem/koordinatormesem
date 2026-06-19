@@ -1,0 +1,170 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #eef2f7;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* iOS güvenli alan boşlukları */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ---- Beceri Eğitimi Değerlendirme Formu yazdırma ---- */
+.print-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: auto;
+  background: #525659;
+}
+.a4-sheet {
+  width: 297mm;
+  min-height: 210mm;
+  margin: 8px auto;
+  padding: 8mm;
+  box-sizing: border-box;
+  background: #fff;
+  display: flex;
+  gap: 6mm;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+.bform {
+  flex: 1 1 0;
+  min-width: 0;
+  border: 1px solid #000;
+  padding: 2mm;
+  box-sizing: border-box;
+  font-size: 7.5pt;
+  line-height: 1.25;
+  color: #000;
+  display: flex;
+  flex-direction: column;
+}
+/* değerlendirme bölümleri dikeyde sayfaya yayılsın */
+.bform-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.bform-empty {
+  flex: 1 1 0;
+}
+
+/* Öğretmen Fesih Formu — dikey A4, sayfa başına 1 form */
+.fesih-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 8px auto;
+  padding: 16mm 14mm;
+  box-sizing: border-box;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  color: #000;
+  font-size: 11pt;
+  line-height: 1.35;
+}
+.aciklama-box:empty::before {
+  content: attr(data-ph);
+  color: #aaa;
+}
+.fesih-date {
+  border: none;
+  border-bottom: 1px dotted #000;
+  font-size: 11pt;
+  font-family: inherit;
+  padding: 0 2px;
+}
+
+/* İşyeri Fesih Formu — dikey A4, sayfada 2 dilekçe (alt alta) */
+.isyeri-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 8px auto;
+  padding: 16mm 18mm;
+  box-sizing: border-box;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  color: #000;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+}
+.isyeri-petition {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+}
+.isyeri-divider {
+  border-top: 1px solid #000;
+  margin: 6mm 0;
+}
+
+@media print {
+  #root {
+    display: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-overlay {
+    position: static !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .a4-sheet {
+    page: beceri;
+    width: 100%;
+    height: 193mm;
+    min-height: 193mm;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    page-break-after: always;
+  }
+  .fesih-sheet {
+    page: fesih;
+    width: auto;
+    min-height: 0;
+    height: 265mm;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    page-break-after: always;
+  }
+  .isyeri-sheet {
+    page: fesih;
+    width: auto;
+    min-height: 0;
+    height: 265mm;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    page-break-after: always;
+  }
+  @page beceri {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+  @page fesih {
+    size: A4 portrait;
+    margin: 16mm;
+  }
+}
