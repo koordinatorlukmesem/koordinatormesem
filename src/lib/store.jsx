@@ -427,23 +427,23 @@ export function AppProvider({ children }) {
     showNotif('Yeni Liste Yüklendi', `${label} tarihli öğrenci listesi güncellendi.`, 'import')
   }, [authReady, teacherId, hasNewImport, config.lastImportLabel, config.lastImportDate])
 
-  // 2. Yeni işletme bildirimi
+  // 2. Yeni işletme bildirimi — sadece henüz görülmemiş import döneminde çal
   useEffect(() => {
-    if (!authReady || !teacherId) return
+    if (!authReady || !teacherId || !hasNewImport) return
     const count = newBusinesses.length
     if (count === 0 || notifiedRef.current.biz) return
     notifiedRef.current.biz = true
     showNotif('Yeni İşletme', `${count} yeni işletme listenize eklendi.`, 'new-biz')
-  }, [authReady, teacherId, newBusinesses.length])
+  }, [authReady, teacherId, hasNewImport, newBusinesses.length])
 
-  // 3. Yeni öğrenci bildirimi
+  // 3. Yeni öğrenci bildirimi — sadece henüz görülmemiş import döneminde çal
   useEffect(() => {
-    if (!authReady || !teacherId) return
+    if (!authReady || !teacherId || !hasNewImport) return
     const count = newStudents.length
     if (count === 0 || notifiedRef.current.stu) return
     notifiedRef.current.stu = true
     showNotif('Yeni Öğrenci', `${count} yeni öğrenci listenize eklendi.`, 'new-stu')
-  }, [authReady, teacherId, newStudents.length])
+  }, [authReady, teacherId, hasNewImport, newStudents.length])
 
   // ---- persist yardımcıları (localStorage + Supabase) ----
   function persistGroups(next) {
