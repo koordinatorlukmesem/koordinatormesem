@@ -3,7 +3,7 @@ import { useApp } from '../lib/store.jsx'
 
 export default function AdminPanel() {
   const {
-    school, setSchool, adminTeachers, importExcel, adminLogout, lastImportLabel,
+    school, setSchool, adminTeachersList, importExcel, adminLogout, lastImportLabel,
     isSuperAdmin, currentAdmin, admins, logs, imports, addAdmin, deleteAdmin,
   } = useApp()
   const [name, setName] = useState(school)
@@ -19,7 +19,7 @@ export default function AdminPanel() {
   const [revealed, setRevealed] = useState(() => new Set())
   const fileRef = useRef(null)
 
-  const teachers = adminTeachers()
+  const teachers = adminTeachersList
   const loadedFile = imports[0]?.name || null
   const filteredTeachers = teachers.filter((t) =>
     t.name.toLocaleLowerCase('tr').includes(teacherQ.trim().toLocaleLowerCase('tr')),
@@ -44,8 +44,8 @@ export default function AdminPanel() {
     }
   }
 
-  function saveSchool() {
-    setSchool(name)
+  async function saveSchool() {
+    await setSchool(name)
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
   }
