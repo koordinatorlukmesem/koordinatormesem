@@ -134,12 +134,21 @@ export function AppProvider({ children }) {
     return !error
   }
 
-  // ---- öğretmenin işletme/öğrenci/fesih verilerini yükle ----
+  // Supabase teacher_state'e fire-and-forget yama yazar
+  function syncState(tid, patch) {
+    supabase
+      .from('teacher_state')
+      .upsert({ teacher_id: tid, ...patch }, { onConflict: 'teacher_id' })
+      .then(({ error }) => error && console.warn('state sync:', error.message))
+  }
+
+  // ---- öğretmenin işletme/öğrenci/fesih + durum verilerini yükle ----
   async function loadTeacherData(tid) {
-    const [biz, stu, term] = await Promise.all([
+    const [biz, stu, term, stateRes] = await Promise.all([
       supabase.from('businesses').select('*').eq('teacher_id', tid),
       supabase.from('students').select('*').eq('teacher_id', tid),
       supabase.from('terminated').select('*').eq('teacher_id', tid),
+      supabase.from('teacher_state').select('*').eq('teacher_id', tid).maybeSingle(),
     ])
     const byBiz = {}
     for (const s of stu.data || []) (byBiz[s.business_id] ||= []).push(s)
@@ -152,6 +161,21 @@ export function AppProvider({ children }) {
         tel: t.tel, businessName: t.business_name, date: t.date,
       })),
     )
+
+    // Supabase'deki durum verisi localStorage'ın üzerine yazar (çapraz cihaz)
+    const s = stateRes.data
+    if (s) {
+      setGroups(s.groups || [])
+      setAck(s.ack || [])
+      setControls(s.controls || {})
+      if (s.seen_import_date) {
+        setSeenImport(s.seen_import_date)
+        localStorage.setItem(seenImportKey(tid), s.seen_import_date)
+      }
+      localStorage.setItem(groupsKey(tid), JSON.stringify(s.groups || []))
+      localStorage.setItem(ackKey(tid), JSON.stringify(s.ack || []))
+      localStorage.setItem(controlsKey(tid), JSON.stringify(s.controls || {}))
+    }
   }
 
   // ---- başlangıç: public veriler + öğretmen oturumu ----
@@ -210,8 +234,10 @@ export function AppProvider({ children }) {
     if (!teacherId || !config.lastImportDate) return
     let si = localStorage.getItem(seenImportKey(teacherId))
     if (si === null) {
+      // İlk giriş: mevcut import'u görülmüş say (bildirim gösterme)
       si = config.lastImportDate
       localStorage.setItem(seenImportKey(teacherId), si)
+      syncState(teacherId, { seen_import_date: si })
     }
     setSeenImport(si)
   }, [teacherId, config.lastImportDate])
@@ -221,8 +247,10 @@ export function AppProvider({ children }) {
     seenImport !== config.lastImportDate
   function markImportSeen() {
     if (!teacherId) return
-    localStorage.setItem(seenImportKey(teacherId), config.lastImportDate || '')
-    setSeenImport(config.lastImportDate || '')
+    const date = config.lastImportDate || ''
+    localStorage.setItem(seenImportKey(teacherId), date)
+    setSeenImport(date)
+    syncState(teacherId, { seen_import_date: date || null })
   }
 
   // ---- türev listeler ----
@@ -245,10 +273,28 @@ export function AppProvider({ children }) {
     return out
   }, [businesses, ack])
 
-  // ---- persist yardımcıları ----
-  function persistGroups(next)   { setGroups(next); if (teacherId) localStorage.setItem(groupsKey(teacherId), JSON.stringify(next)) }
-  function persistAck(next)      { setAck(next);    if (teacherId) localStorage.setItem(ackKey(teacherId), JSON.stringify(next)) }
-  function persistControls(next) { setControls(next); if (teacherId) localStorage.setItem(controlsKey(teacherId), JSON.stringify(next)) }
+  // ---- persist yardımcıları (localStorage + Supabase) ----
+  function persistGroups(next) {
+    setGroups(next)
+    if (teacherId) {
+      localStorage.setItem(groupsKey(teacherId), JSON.stringify(next))
+      syncState(teacherId, { groups: next })
+    }
+  }
+  function persistAck(next) {
+    setAck(next)
+    if (teacherId) {
+      localStorage.setItem(ackKey(teacherId), JSON.stringify(next))
+      syncState(teacherId, { ack: next })
+    }
+  }
+  function persistControls(next) {
+    setControls(next)
+    if (teacherId) {
+      localStorage.setItem(controlsKey(teacherId), JSON.stringify(next))
+      syncState(teacherId, { controls: next })
+    }
+  }
   function persistAdmins(next)   { setAdmins(next); localStorage.setItem(ADMINS_KEY, JSON.stringify(next)) }
   function addLog(name, role, action) {
     const cur = readJSON(LOGS_KEY, [])
