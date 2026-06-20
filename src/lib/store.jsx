@@ -137,11 +137,16 @@ export function AppProvider({ children }) {
     return !error
   }
 
-  // Supabase teacher_state'e fire-and-forget yama yazar
+  // Supabase teacher_state'e fire-and-forget yazar.
+  // Mevcut tüm durumu + patch'i birlikte gönderir; böylece ilk INSERT'te
+  // DB default'ları mevcut groups/ack/controls üzerine yazamaz.
   function syncState(tid, patch) {
     supabase
       .from('teacher_state')
-      .upsert({ teacher_id: tid, ...patch }, { onConflict: 'teacher_id' })
+      .upsert(
+        { teacher_id: tid, groups, ack, controls, seen_import_date: seenImport, ...patch },
+        { onConflict: 'teacher_id' },
+      )
       .then(({ error }) => error && console.warn('state sync:', error.message))
   }
 
