@@ -20,3 +20,9 @@ create policy push_sub_own on public.push_subscriptions
   for all to authenticated
   using  (teacher_id = (auth.jwt() -> 'app_metadata' ->> 'teacher_id'))
   with check (teacher_id = (auth.jwt() -> 'app_metadata' ->> 'teacher_id'));
+
+-- Admin tüm abonelikleri okuyabilir (push gönderimi: Vercel API route)
+drop policy if exists push_sub_admin on public.push_subscriptions;
+create policy push_sub_admin on public.push_subscriptions
+  for select to authenticated
+  using (public.is_admin());
