@@ -1,9 +1,8 @@
-// Vercel Serverless Function — öğretmenlere Web Push bildirimi gönderir.
-// Otomatik deploy olur (api/ klasörü Vercel tarafından algılanır).
+// Vercel Serverless Function (ESM) — öğretmenlere Web Push bildirimi gönderir.
 // Vercel Dashboard → Settings → Environment Variables → VAPID_PRIVATE_KEY ekleyin.
 
-const webpush = require('web-push')
-const { createClient } = require('@supabase/supabase-js')
+import webpush from 'web-push'
+import { createClient } from '@supabase/supabase-js'
 
 const VAPID_PUBLIC_KEY =
   'BF_5imh8Tm6i_FTpkjpMvCtzJuad87JVIfWsQFu5io8ch9BtYX6glQQ8roQs60dKUcPpWZ8tqpfmzi7q0u6f2nQ'
@@ -14,7 +13,7 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY,
 )
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
   if (req.method === 'OPTIONS') return res.status(200).end()
@@ -36,10 +35,20 @@ module.exports = async function handler(req, res) {
 
   const { importLabel, teacherStats } = req.body
 
+  // Yeni öğe olmayan öğretmenler zaten teacherStats'ta yer almaz (store.jsx tarafında filtrelendi)
+  if (!teacherStats || Object.keys(teacherStats).length === 0) {
+    return res.json({ sent: 0, expired: 0, skipped: 'no_new_items' })
+  }
+
   // Admin JWT ile tüm abonelikleri oku (RLS: push_sub_admin policy)
-  const { data: subs } = await supabase
+  const { data: subs, error: subsErr } = await supabase
     .from('push_subscriptions')
     .select('id, teacher_id, subscription')
+
+  if (subsErr) {
+    console.error('push_subscriptions read error:', subsErr.message)
+    return res.status(500).json({ error: subsErr.message })
+  }
 
   // Öğretmene göre abonelik haritası
   const subsByTeacher = {}
@@ -50,17 +59,17 @@ module.exports = async function handler(req, res) {
   const expiredIds = []
   let sent = 0
 
-  for (const [tid, stats] of Object.entries(teacherStats || {})) {
+  for (const [tid, stats] of Object.entries(teacherStats)) {
     const teacherSubs = subsByTeacher[tid] || []
     if (!teacherSubs.length) continue
 
     const parts = []
     if (stats.newBiz > 0) parts.push(`${stats.newBiz} yeni işletme`)
     if (stats.newStu > 0) parts.push(`${stats.newStu} yeni öğrenci`)
-    const body =
-      parts.length > 0
-        ? `${importLabel} listesinde ${parts.join(', ')} eklendi.`
-        : `${importLabel} tarihli liste güncellendi.`
+    // Güvenlik ağı: ikisi de 0 ise gönderme (store'dan zaten filtreleniyor)
+    if (parts.length === 0) continue
+
+    const body = `${importLabel} listesinde ${parts.join(', ')} eklendi.`
     const payload = JSON.stringify({ title: 'Yeni Liste Yüklendi', body, tag: 'import' })
 
     await Promise.allSettled(
@@ -69,6 +78,7 @@ module.exports = async function handler(req, res) {
           await webpush.sendNotification(sub, payload)
           sent++
         } catch (err) {
+          console.error('Push send error:', err.statusCode, err.message)
           if (err.statusCode === 410 || err.statusCode === 404) expiredIds.push(id)
         }
       }),

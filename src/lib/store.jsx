@@ -783,28 +783,32 @@ export function AppProvider({ children }) {
     }).eq('id', 1)
     setConfig((c) => ({ ...c, lastImportDate: importDate, lastImportLabel: label }))
 
-    // 11b. Öğretmen başına yeni işletme/öğrenci sayılarını hesapla
+    // 11b. Sadece gerçekten yeni öğesi olan öğretmenleri push listesine al
     const teacherStats = {}
     for (const b of bizRows) {
+      if (!b.is_new) continue
       if (!teacherStats[b.teacher_id]) teacherStats[b.teacher_id] = { newBiz: 0, newStu: 0 }
-      if (b.is_new) teacherStats[b.teacher_id].newBiz++
+      teacherStats[b.teacher_id].newBiz++
     }
     for (const s of stuRows) {
+      if (!s.is_new) continue
       if (!teacherStats[s.teacher_id]) teacherStats[s.teacher_id] = { newBiz: 0, newStu: 0 }
-      if (s.is_new) teacherStats[s.teacher_id].newStu++
+      teacherStats[s.teacher_id].newStu++
     }
-    // Fire-and-forget: Vercel API route aracılığıyla arka plan push bildirimi gönder
-    adminSupabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.access_token) return
-      fetch('/api/send-push', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ importLabel: label, teacherStats }),
-      }).catch((err) => console.warn('Push invoke:', err))
-    })
+    // Yeni öğe yoksa push gönderme (aynı Excel tekrar yüklendiyse vs.)
+    if (Object.keys(teacherStats).length > 0) {
+      adminSupabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session?.access_token) return
+        fetch('/api/send-push', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ importLabel: label, teacherStats }),
+        }).catch((err) => console.warn('Push invoke:', err))
+      })
+    }
 
     // 12. Import geçmişini localStorage'a yaz
     const nextImports = [{ name: file.name, date: importDate, ts: Date.now() }, ...imports].slice(0, 50)
