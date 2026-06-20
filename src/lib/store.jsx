@@ -622,7 +622,7 @@ export function AppProvider({ children }) {
     // 1. Mevcut Supabase verisini "previous" olarak çek (diff için)
     const [{ data: curBizes, error: e1 }, { data: curStus, error: e2 }] = await Promise.all([
       adminSupabase.from('businesses').select('id, teacher_id, name'),
-      adminSupabase.from('students').select('business_id, no, name, sube, tel'),
+      adminSupabase.from('students').select('id, business_id, no, name, sube, tel'),
     ])
     if (e1 || e2) throw new Error('Mevcut veri okunamadı: ' + (e1?.message || e2?.message))
 
@@ -720,6 +720,15 @@ export function AppProvider({ children }) {
         })
       }
     }
+
+    // 4b. is_new'i stabil ID karşılaştırmasıyla yeniden hesapla.
+    // buildDataset isim eşleşmesine dayanır; öğretmen adında küçük fark (boşluk,
+    // büyük/küçük harf, Türkçe kodlama) varsa tüm o öğretmenin işletmeleri
+    // yanlışlıkla "yeni" görünür. Stabil ID her koşulda tutarlıdır.
+    const prevBizIdSet = new Set((curBizes || []).map((b) => b.id))
+    const prevStuIdSet = new Set((curStus || []).map((s) => s.id))
+    for (const b of bizRows) b.is_new = !prevBizIdSet.has(b.id)
+    for (const s of stuRows) s.is_new = !prevStuIdSet.has(s.id)
 
     // 5. Fesih satırları hazırla
     const termRows = (next.terminated || [])
