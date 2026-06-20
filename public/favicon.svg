@@ -1,4 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="96" fill="#1d4ed8"/>
-  <path d="M256 96c-66 0-120 54-120 120 0 84 120 200 120 200s120-116 120-200c0-66-54-120-120-120zm0 168a48 48 0 1 1 0-96 48 48 0 0 1 0 96z" fill="#ffffff"/>
+  <!-- Login ekranındaki bina ikonu (M3 21V8l9-5 9 5v13M9 21v-6h6v6), scale(16) translate(64,64) -->
+  <g transform="translate(64 64) scale(16)" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>
+  </g>
 </svg>
