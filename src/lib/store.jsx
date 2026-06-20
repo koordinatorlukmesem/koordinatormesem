@@ -86,12 +86,30 @@ export function AppProvider({ children }) {
       : null
   }, [teachersList, teacherId])
 
-  // ---- admin öğretmen listesini Supabase'den yükle (PIN dahil) ----
+  // Verilen DB admin listesini DEFAULT_ADMINS ile birleştir
+  function mergeAdmins(dbAdmins) {
+    const out = [...DEFAULT_ADMINS]
+    for (const a of dbAdmins || []) {
+      if (!out.some((x) => x.id === a.id)) out.push(a)
+    }
+    return out
+  }
+
+  // ---- admin öğretmen listesini + DB admin hesaplarını Supabase'den yükle ----
   async function loadAdminData() {
-    const [{ data: tl }, { data: sec }] = await Promise.all([
+    const [{ data: tl }, { data: sec }, { data: cfg }] = await Promise.all([
       adminSupabase.from('teachers').select('*'),
       adminSupabase.from('teacher_secrets').select('*'),
+      adminSupabase.from('app_config').select('admin_accounts').eq('id', 1).maybeSingle(),
     ])
+
+    // Admin hesaplarını DB'den senkronize et
+    if (cfg) {
+      const merged = mergeAdmins(cfg.admin_accounts)
+      setAdmins(merged)
+      localStorage.setItem(ADMINS_KEY, JSON.stringify(merged))
+    }
+
     const pinMap = {}
     for (const s of sec || []) pinMap[s.teacher_id] = s.pin
     setAdminTeachersList(
@@ -265,14 +283,30 @@ export function AppProvider({ children }) {
     setTeacherId(null); setBusinesses([]); setTerminated([])
   }
 
-  // ---- auth: admin (localStorage + adminSupabase) ----
+  // ---- auth: admin (Supabase DB + localStorage fallback) ----
   async function adminLogin(username, password) {
-    const a = admins.find(
-      (x) => x.username === String(username).trim() && x.password === String(password),
-    )
-    if (!a) return { ok: false, error: 'Kullanıcı adı veya şifre hatalı.' }
+    const u = String(username).trim()
+    const p = String(password)
+
+    // 1. Supabase admin oturumu aç (admin@mesem.app)
     const ok = await ensureAdminSession()
-    if (!ok) return { ok: false, error: 'Veritabanı bağlantısı kurulamadı. create-admin.mjs çalıştırıldı mı?' }
+    if (!ok) return { ok: false, error: 'Veritabanı bağlantısı kurulamadı.' }
+
+    // 2. DB'deki admin hesaplarını oku (her cihazda güncel liste)
+    const { data: cfg } = await adminSupabase
+      .from('app_config').select('admin_accounts').eq('id', 1).maybeSingle()
+    const allAdmins = mergeAdmins(cfg?.admin_accounts)
+
+    // 3. Kimlik doğrula
+    const a = allAdmins.find((x) => x.username === u && x.password === p)
+    if (!a) {
+      await adminSupabase.auth.signOut()
+      return { ok: false, error: 'Kullanıcı adı veya şifre hatalı.' }
+    }
+
+    // 4. Oturumu kaydet
+    setAdmins(allAdmins)
+    localStorage.setItem(ADMINS_KEY, JSON.stringify(allAdmins))
     localStorage.setItem(ADMIN_KEY, a.id)
     setAdminId(a.id)
     addLog(a.username, a.role === 'super' ? 'Süper Admin' : 'Admin', 'Giriş')
@@ -287,20 +321,27 @@ export function AppProvider({ children }) {
     setAdminId(null)
     setAdminTeachersList([])
   }
-  function addAdmin(username, password) {
+  async function addAdmin(username, password) {
     if (!isSuperAdmin) return { ok: false, error: 'Yetkiniz yok.' }
     const u = String(username).trim()
     if (!u || !String(password).trim()) return { ok: false, error: 'Kullanıcı adı ve şifre gerekli.' }
     if (admins.some((a) => a.username.toLocaleLowerCase('tr') === u.toLocaleLowerCase('tr')))
       return { ok: false, error: 'Bu kullanıcı adı zaten var.' }
-    persistAdmins([...admins, { id: 'ad' + Date.now(), username: u, password: String(password), role: 'admin' }])
+    const nextAdmins = [...admins, { id: 'ad' + Date.now(), username: u, password: String(password), role: 'admin' }]
+    const dbAdmins = nextAdmins.filter((a) => a.id !== DEFAULT_ADMINS[0].id)
+    const { error } = await adminSupabase.from('app_config').update({ admin_accounts: dbAdmins }).eq('id', 1)
+    if (error) return { ok: false, error: 'Kaydedilemedi: ' + error.message }
+    persistAdmins(nextAdmins)
     return { ok: true }
   }
-  function deleteAdmin(id) {
+  async function deleteAdmin(id) {
     if (!isSuperAdmin) return
     const a = admins.find((x) => x.id === id)
     if (!a || a.role === 'super') return
-    persistAdmins(admins.filter((x) => x.id !== id))
+    const nextAdmins = admins.filter((x) => x.id !== id)
+    const dbAdmins = nextAdmins.filter((a) => a.id !== DEFAULT_ADMINS[0].id)
+    await adminSupabase.from('app_config').update({ admin_accounts: dbAdmins }).eq('id', 1)
+    persistAdmins(nextAdmins)
   }
 
   // ---- selectors ----

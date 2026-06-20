@@ -33,9 +33,9 @@ export default function AdminPanel() {
     })
   }
 
-  function submitNewAdmin(e) {
+  async function submitNewAdmin(e) {
     e.preventDefault()
-    const res = addAdmin(newAdmin.username, newAdmin.password)
+    const res = await addAdmin(newAdmin.username, newAdmin.password)
     if (res.ok) {
       setNewAdmin({ username: '', password: '' })
       setAdminMsg({ type: 'ok', text: 'Admin eklendi.' })
