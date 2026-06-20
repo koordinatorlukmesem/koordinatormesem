@@ -605,8 +605,9 @@ export function AppProvider({ children }) {
     if (e1) return { ok: false, error: 'Mevcut PIN hatalı.' }
     const { error: e2 } = await supabase.auth.updateUser({ password: pinToPassword(newPin) })
     if (e2) return { ok: false, error: e2.message }
-    // teacher_secrets'i de güncelle (PIN görüntüleme için)
-    await supabase.from('teacher_secrets').update({ pin: String(newPin) }).eq('teacher_id', id)
+    // teacher_secrets'i RPC ile güncelle; direct update RLS'i eski öğretmenlerde bloklar
+    const { error: e3 } = await supabase.rpc('update_teacher_pin', { new_pin: String(newPin) })
+    if (e3) console.warn('teacher_secrets PIN güncelleme:', e3.message)
     return { ok: true }
   }
 
