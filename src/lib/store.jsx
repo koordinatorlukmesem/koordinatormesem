@@ -795,20 +795,19 @@ export function AppProvider({ children }) {
       if (!teacherStats[s.teacher_id]) teacherStats[s.teacher_id] = { newBiz: 0, newStu: 0 }
       teacherStats[s.teacher_id].newStu++
     }
-    // Yeni öğe yoksa push gönderme (aynı Excel tekrar yüklendiyse vs.)
-    if (Object.keys(teacherStats).length > 0) {
-      adminSupabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session?.access_token) return
-        fetch('/api/send-push', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ importLabel: label, teacherStats }),
-        }).catch((err) => console.warn('Push invoke:', err))
-      })
-    }
+    // Her Excel yüklemesinde tüm abonelere "güncellendi" bildirimi gider;
+    // teacherStats yalnız yeni öğesi olan öğretmenleri içerir (ek bildirimler için).
+    adminSupabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.access_token) return
+      fetch('/api/send-push', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ importLabel: label, fileName: file.name, teacherStats }),
+      }).catch((err) => console.warn('Push invoke:', err))
+    })
 
     // 12. Import geçmişini localStorage'a yaz
     const nextImports = [{ name: file.name, date: importDate, ts: Date.now() }, ...imports].slice(0, 50)

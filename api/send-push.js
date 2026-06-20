@@ -13,6 +13,23 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY,
 )
 
+// Verilen abonelik listesine tek bir bildirimi gönderir; süresi dolanları toplar.
+async function pushToSubs(subs, payloadStr, expiredIds) {
+  let sent = 0
+  await Promise.allSettled(
+    subs.map(async ({ id, sub }) => {
+      try {
+        await webpush.sendNotification(sub, payloadStr)
+        sent++
+      } catch (err) {
+        console.error('Push send error:', err.statusCode, err.message)
+        if (err.statusCode === 410 || err.statusCode === 404) expiredIds.push(id)
+      }
+    }),
+  )
+  return sent
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Headers', 'authorization, content-type')
@@ -33,12 +50,10 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Forbidden' })
   }
 
-  const { importLabel, teacherStats } = req.body
-
-  // Yeni öğe olmayan öğretmenler zaten teacherStats'ta yer almaz (store.jsx tarafında filtrelendi)
-  if (!teacherStats || Object.keys(teacherStats).length === 0) {
-    return res.json({ sent: 0, expired: 0, skipped: 'no_new_items' })
-  }
+  // importLabel: "20 Haziran" formatı
+  // fileName: "liste.xlsx" — tüm kullanıcı bildiriminde gösterilir
+  // teacherStats: sadece yeni öğesi olan öğretmenler { tid: { newBiz, newStu } }
+  const { importLabel, fileName, teacherStats } = req.body
 
   // Admin JWT ile tüm abonelikleri oku (RLS: push_sub_admin policy)
   const { data: subs, error: subsErr } = await supabase
@@ -59,30 +74,39 @@ export default async function handler(req, res) {
   const expiredIds = []
   let sent = 0
 
-  for (const [tid, stats] of Object.entries(teacherStats)) {
+  // ── 1. Tüm abonelere: "Liste güncellendi" bildirimi ──────────────────────
+  const fileLabel = fileName ? ` (${fileName})` : ''
+  const updatePayload = JSON.stringify({
+    title: 'İşletme Listesi Güncellendi',
+    body: `İşletme Listesi Yönetici Tarafından Güncellendi.${fileLabel}`,
+    tag: 'import-update',
+  })
+  for (const teacherSubs of Object.values(subsByTeacher)) {
+    sent += await pushToSubs(teacherSubs, updatePayload, expiredIds)
+  }
+
+  // ── 2. Yeni işletme/öğrencisi olan öğretmenlere ek bildirimler ────────────
+  for (const [tid, stats] of Object.entries(teacherStats || {})) {
     const teacherSubs = subsByTeacher[tid] || []
     if (!teacherSubs.length) continue
 
-    const parts = []
-    if (stats.newBiz > 0) parts.push(`${stats.newBiz} yeni işletme`)
-    if (stats.newStu > 0) parts.push(`${stats.newStu} yeni öğrenci`)
-    // Güvenlik ağı: ikisi de 0 ise gönderme (store'dan zaten filtreleniyor)
-    if (parts.length === 0) continue
+    if (stats.newBiz > 0) {
+      const payload = JSON.stringify({
+        title: 'Yeni İşletme Eklendi',
+        body: `${stats.newBiz} yeni işletme listenize eklendi.`,
+        tag: 'import-biz',
+      })
+      sent += await pushToSubs(teacherSubs, payload, expiredIds)
+    }
 
-    const body = `${importLabel} listesinde ${parts.join(', ')} eklendi.`
-    const payload = JSON.stringify({ title: 'Yeni Liste Yüklendi', body, tag: 'import' })
-
-    await Promise.allSettled(
-      teacherSubs.map(async ({ id, sub }) => {
-        try {
-          await webpush.sendNotification(sub, payload)
-          sent++
-        } catch (err) {
-          console.error('Push send error:', err.statusCode, err.message)
-          if (err.statusCode === 410 || err.statusCode === 404) expiredIds.push(id)
-        }
-      }),
-    )
+    if (stats.newStu > 0) {
+      const payload = JSON.stringify({
+        title: 'Yeni Öğrenci Eklendi',
+        body: `${stats.newStu} yeni öğrenci listenize eklendi.`,
+        tag: 'import-stu',
+      })
+      sent += await pushToSubs(teacherSubs, payload, expiredIds)
+    }
   }
 
   // Süresi dolmuş abonelikleri sil
