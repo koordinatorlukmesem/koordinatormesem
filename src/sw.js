@@ -17,6 +17,21 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
+// Arka planda gelen Web Push bildirimi (uygulama kapalıyken)
+self.addEventListener('push', (event) => {
+  if (!event.data) return
+  const { title, body, tag } = event.data.json()
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icons/icon.svg',
+      badge: '/icons/icon.svg',
+      tag,
+      renotify: true,
+    }),
+  )
+})
+
 // Bildirime tıklanınca uygulamayı ön plana getir veya aç
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()

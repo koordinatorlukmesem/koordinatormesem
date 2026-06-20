@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import * as XLSX from 'xlsx'
 import { buildDataset, trDateLabel } from './buildDataset.js'
 import { supabase, adminSupabase, ADMIN_EMAIL, ADMIN_DB_PASS, pinToPassword, teacherEmail } from './supabase.js'
+import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from './vapid.js'
 
 // ---------------------------------------------------------------------------
 // FAZ 2: Admin işlemleri (Excel yükleme, okul adı, öğretmen listesi) Supabase'de.
@@ -374,6 +375,31 @@ export function AppProvider({ children }) {
     } catch { /* ignore */ }
   }
 
+  // Web Push aboneliğini al ve Supabase'e kaydet (arka plan bildirimleri için)
+  async function subscribePush(tid) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    if (Notification.permission !== 'granted') return
+    try {
+      const reg = await navigator.serviceWorker.ready
+      let sub = await reg.pushManager.getSubscription()
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        })
+      }
+      const subJSON = sub.toJSON()
+      await supabase
+        .from('push_subscriptions')
+        .upsert(
+          { teacher_id: tid, endpoint: subJSON.endpoint, subscription: subJSON },
+          { onConflict: 'teacher_id,endpoint' },
+        )
+    } catch (err) {
+      console.warn('Push subscription:', err)
+    }
+  }
+
   // 1. Yeni import bildirimi
   useEffect(() => {
     if (!authReady || !teacherId || !hasNewImport) return
@@ -448,10 +474,11 @@ export function AppProvider({ children }) {
     await loadTeacherData(id)
     const t = teachersList.find((x) => x.id === id)
     addLog(t?.name || id, 'Öğretmen', 'Giriş')
-    // Form submit bağlamında bildirim izni iste (kullanıcı hareketi gerekli)
+    // Form submit bağlamında bildirim izni iste, ardından push aboneliği al
     if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {})
+      await Notification.requestPermission().catch(() => {})
     }
+    await subscribePush(id)
     return { ok: true }
   }
   async function logout() {
@@ -705,6 +732,21 @@ export function AppProvider({ children }) {
       last_import_label: label,
     }).eq('id', 1)
     setConfig((c) => ({ ...c, lastImportDate: importDate, lastImportLabel: label }))
+
+    // 11b. Öğretmen başına yeni işletme/öğrenci sayılarını hesapla
+    const teacherStats = {}
+    for (const b of bizRows) {
+      if (!teacherStats[b.teacher_id]) teacherStats[b.teacher_id] = { newBiz: 0, newStu: 0 }
+      if (b.is_new) teacherStats[b.teacher_id].newBiz++
+    }
+    for (const s of stuRows) {
+      if (!teacherStats[s.teacher_id]) teacherStats[s.teacher_id] = { newBiz: 0, newStu: 0 }
+      if (s.is_new) teacherStats[s.teacher_id].newStu++
+    }
+    // Fire-and-forget: Edge Function aracılığıyla arka plan push bildirimi gönder
+    adminSupabase.functions
+      .invoke('send-push', { body: { importLabel: label, teacherStats } })
+      .catch((err) => console.warn('Push invoke:', err))
 
     // 12. Import geçmişini localStorage'a yaz
     const nextImports = [{ name: file.name, date: importDate, ts: Date.now() }, ...imports].slice(0, 50)
