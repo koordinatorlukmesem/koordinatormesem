@@ -75,7 +75,9 @@ export default function Login() {
           {busy ? 'Giriş yapılıyor…' : 'Giriş Yap'}
         </button>
 
-        <p className="text-center text-xs text-slate-400">Demo PIN: 1234</p>
+        <p className="text-center text-xs text-slate-400">
+          İlk girişte PIN: <span className="font-semibold">1234</span> — Profilden değiştirebilirsiniz.
+        </p>
       </form>
 
       <Link

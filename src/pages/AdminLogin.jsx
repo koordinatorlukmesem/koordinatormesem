@@ -8,10 +8,14 @@ export default function AdminLogin() {
   const [pwd, setPwd] = useState('')
   const [error, setError] = useState('')
 
-  function submit(e) {
+  const [busy, setBusy] = useState(false)
+
+  async function submit(e) {
     e.preventDefault()
     setError('')
-    const res = adminLogin(username, pwd)
+    setBusy(true)
+    const res = await adminLogin(username, pwd)
+    setBusy(false)
     if (!res.ok) setError(res.error)
   }
 
@@ -51,11 +55,11 @@ export default function AdminLogin() {
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
         <button
           type="submit"
-          className="w-full rounded-xl bg-slate-800 py-3 font-semibold text-white shadow active:bg-slate-900"
+          disabled={busy}
+          className="w-full rounded-xl bg-slate-800 py-3 font-semibold text-white shadow active:bg-slate-900 disabled:bg-slate-300"
         >
-          Giriş Yap
+          {busy ? 'Giriş yapılıyor…' : 'Giriş Yap'}
         </button>
-        <p className="text-center text-xs text-slate-400">Süper admin demo: admin / admin123</p>
       </form>
 
       <Link to="/login" className="mt-6 text-center text-sm font-semibold text-slate-500 active:text-slate-700">
