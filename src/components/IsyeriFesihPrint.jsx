@@ -41,7 +41,7 @@ function Petition({ s, school }) {
       <div style={{ marginTop: '4px' }}>
         <Field label="*Adı ve Soyadı" value={s.name} />
         <Field label="*TC Kimlik NO" value="" />
-        <Field label="*Okul NO / SINIF" value={`${s.no || ''} / ${s.sinif || ''}`} />
+        <Field label="*Okul NO / SINIF" value={`${s.no || ''} / ${s.sube || ''}`} />
         <Field label="Alan/Dal (Meslek)" value={s.dal} />
       </div>
 

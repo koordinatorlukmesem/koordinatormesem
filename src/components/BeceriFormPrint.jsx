@@ -94,7 +94,7 @@ function BeceriForm({ s }) {
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 700, marginBottom: '5px' }}>Çırak Öğrencinin</div>
           <Field label="Adı Soyadı" value={s.name} lw="30mm" mb="5px" />
-          <Field label="Sınıfı" value={s.sinif} lw="30mm" mb="5px" />
+          <Field label="Sınıfı" value={s.sube} lw="30mm" mb="5px" />
           <Field label="Numarası" value={s.no} lw="30mm" mb="5px" />
           <Field label="Meslek Alan/Dal" value={s.dal} lw="30mm" mb="5px" />
           <Field label="Form Düzenleme Tarihi" value="...../...../202..." lw="30mm" bold={false} mb="5px" />

@@ -51,7 +51,7 @@ function FesihForm({ s, school }) {
         <tbody>
           <Row label="Adı Soyadı" value={s.name} />
           <Row label="Alan/Dal" value={s.dal} />
-          <Row label="Sınıfı" value={s.sinif} />
+          <Row label="Sınıfı" value={s.sube} />
           <Row label="Numarası" value={s.no} />
           <Row label="Usta öğreticisi" value={s.usta} />
           <Row label="İşyeri Adresi" value={s.businessAddress} />
