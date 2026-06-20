@@ -1,7 +1,11 @@
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching'
+import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
+import { NavigationRoute, registerRoute } from 'workbox-routing'
 
 cleanupOutdatedCaches()
 precacheAndRoute(self.__WB_MANIFEST)
+
+// SPA: /gruplar, /raporlar gibi rotalar index.html'den yüklensin (404 önler)
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
 
 // Yeni SW aktif olunca tüm sekmeler devralınsın (hemen yenileme)
 self.addEventListener('activate', (event) => {

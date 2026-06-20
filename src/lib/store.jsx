@@ -77,6 +77,8 @@ export function AppProvider({ children }) {
 
   // bildirim tracker: bu oturumda hangi bildirimler gönderildi
   const notifiedRef = useRef({ importLabel: null, biz: false, stu: false })
+  // Realtime/visibility callback'lerinde stale closure olmadan teacherId'ye erişmek için
+  const teacherIdRef = useRef(null)
 
   const currentAdmin  = useMemo(() => admins.find((a) => a.id === adminId) || null, [admins, adminId])
   const isAdmin       = !!currentAdmin
@@ -170,25 +172,51 @@ export function AppProvider({ children }) {
       })),
     )
 
-    // Supabase'deki durum verisi localStorage'ın üzerine yazar (çapraz cihaz)
+    // DB + localStorage birleştir: boş DB satırı localStorage'ı ezip sıfırlamasın.
+    // DB doluysa DB kazanır (başka cihazdan sync); DB boşsa localStorage kazanır.
     const s = stateRes.data
-    if (s) {
-      setGroups(s.groups || [])
-      setAck(s.ack || [])
-      setControls(s.controls || {})
-      if (s.seen_import_date) {
-        setSeenImport(s.seen_import_date)
-        localStorage.setItem(seenImportKey(tid), s.seen_import_date)
-      }
-      localStorage.setItem(groupsKey(tid), JSON.stringify(s.groups || []))
-      localStorage.setItem(ackKey(tid), JSON.stringify(s.ack || []))
-      localStorage.setItem(controlsKey(tid), JSON.stringify(s.controls || {}))
+    const dbGroups   = s?.groups   ?? []
+    const dbAck      = s?.ack      ?? []
+    const dbControls = s?.controls ?? {}
+    const localGroups   = readJSON(groupsKey(tid),   [])
+    const localAck      = readJSON(ackKey(tid),      [])
+    const localControls = readJSON(controlsKey(tid), {})
+
+    const finalGroups   = dbGroups.length > 0                ? dbGroups   : localGroups
+    const finalAck      = dbAck.length > 0                   ? dbAck      : localAck
+    const finalControls = Object.keys(dbControls).length > 0 ? dbControls : localControls
+
+    setGroups(finalGroups)
+    setAck(finalAck)
+    setControls(finalControls)
+    localStorage.setItem(groupsKey(tid),   JSON.stringify(finalGroups))
+    localStorage.setItem(ackKey(tid),      JSON.stringify(finalAck))
+    localStorage.setItem(controlsKey(tid), JSON.stringify(finalControls))
+
+    if (s?.seen_import_date) {
+      setSeenImport(s.seen_import_date)
+      localStorage.setItem(seenImportKey(tid), s.seen_import_date)
+    }
+
+    // Eski hatalı insert'ten kalan boş DB satırını onar
+    if (s && (
+      (dbGroups.length === 0 && finalGroups.length > 0) ||
+      (dbAck.length === 0 && finalAck.length > 0) ||
+      (Object.keys(dbControls).length === 0 && Object.keys(finalControls).length > 0)
+    )) {
+      supabase
+        .from('teacher_state')
+        .update({ groups: finalGroups, ack: finalAck, controls: finalControls })
+        .eq('teacher_id', tid)
+        .then(({ error }) => error && console.warn('state repair:', error.message))
     }
   }
 
   // ---- başlangıç: public veriler + öğretmen oturumu ----
   useEffect(() => {
     let mounted = true
+    let lastDataLoad = 0
+
     ;(async () => {
       const [cfg, tl] = await Promise.all([
         supabase.from('app_config').select('*').eq('id', 1).maybeSingle(),
@@ -207,17 +235,59 @@ export function AppProvider({ children }) {
       }
       const { data: { session } } = await supabase.auth.getSession()
       const tid = session?.user?.app_metadata?.teacher_id || null
-      if (tid) { setTeacherId(tid); await loadTeacherData(tid) }
+      if (tid) { setTeacherId(tid); await loadTeacherData(tid); lastDataLoad = Date.now() }
       if (mounted) setAuthReady(true)
     })()
 
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       const tid = session?.user?.app_metadata?.teacher_id || null
       setTeacherId(tid)
-      if (tid) loadTeacherData(tid)
+      if (tid) { loadTeacherData(tid); lastDataLoad = Date.now() }
       else { setBusinesses([]); setTerminated([]) }
     })
-    return () => { mounted = false; sub.subscription.unsubscribe() }
+
+    // Supabase Realtime: admin yeni Excel yüklediğinde anlık algıla
+    const configChannel = supabase
+      .channel('config-import-watch')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'app_config', filter: 'id=eq.1' },
+        async (payload) => {
+          if (!mounted) return
+          const newDate = payload.new?.last_import_date
+          const newLabel = payload.new?.last_import_label || ''
+          if (!newDate) return
+          setConfig((c) =>
+            c.lastImportDate === newDate
+              ? c
+              : { ...c, lastImportDate: newDate, lastImportLabel: newLabel },
+          )
+          const tid = teacherIdRef.current
+          if (tid) {
+            notifiedRef.current = { importLabel: null, biz: false, stu: false }
+            await loadTeacherData(tid)
+            lastDataLoad = Date.now()
+          }
+        },
+      )
+      .subscribe()
+
+    // Arka plandan ön plana gelince veriyi yenile (en fazla 30 sn'de bir)
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return
+      const tid = teacherIdRef.current
+      if (!tid || Date.now() - lastDataLoad < 30_000) return
+      lastDataLoad = Date.now()
+      await loadTeacherData(tid)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      mounted = false
+      sub.subscription.unsubscribe()
+      supabase.removeChannel(configChannel)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   // ---- admin oturumu restore: localStorage'da adminId varsa Supabase oturumunu sağla ----
@@ -225,6 +295,9 @@ export function AppProvider({ children }) {
     if (!adminId) { setAdminTeachersList([]); return }
     ensureAdminSession().then((ok) => { if (ok) loadAdminData() })
   }, [adminId])
+
+  // teacherIdRef'i güncel tut (Realtime/visibility callback'leri stale closure'dan etkilenmesin)
+  useEffect(() => { teacherIdRef.current = teacherId }, [teacherId])
 
   // ---- öğretmen başına yerel veriler ----
   useEffect(() => {
