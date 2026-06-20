@@ -9,10 +9,12 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       includeAssets: ['favicon.svg'],
-      workbox: {
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
       },
       manifest: {
         name: 'İşletme Takip Sistemi',
@@ -25,9 +27,9 @@ export default defineConfig({
         start_url: '/',
         icons: [
           { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
-        ]
-      }
-    })
-  ]
+          { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+        ],
+      },
+    }),
+  ],
 })

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import { buildDataset, trDateLabel } from './buildDataset.js'
 import { supabase, adminSupabase, ADMIN_EMAIL, ADMIN_DB_PASS, pinToPassword, teacherEmail } from './supabase.js'
@@ -74,6 +74,9 @@ export function AppProvider({ children }) {
   const [ack, setAck]           = useState([])
   const [controls, setControls] = useState({})
   const [seenImport, setSeenImport] = useState(null)
+
+  // bildirim tracker: bu oturumda hangi bildirimler gönderildi
+  const notifiedRef = useRef({ importLabel: null, biz: false, stu: false })
 
   const currentAdmin  = useMemo(() => admins.find((a) => a.id === adminId) || null, [admins, adminId])
   const isAdmin       = !!currentAdmin
@@ -273,6 +276,53 @@ export function AppProvider({ children }) {
     return out
   }, [businesses, ack])
 
+  // ---- push bildirimleri ----
+
+  // Öğretmen değişince tracker sıfırla
+  useEffect(() => {
+    notifiedRef.current = { importLabel: null, biz: false, stu: false }
+  }, [teacherId])
+
+  async function showNotif(title, body, tag) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return
+    const opts = { body, icon: '/icons/icon.svg', badge: '/icons/icon.svg', tag, renotify: false }
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.ready
+        reg.showNotification(title, opts)
+      } else {
+        new Notification(title, opts) // eslint-disable-line no-new
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 1. Yeni import bildirimi
+  useEffect(() => {
+    if (!authReady || !teacherId || !hasNewImport) return
+    const label = config.lastImportLabel || config.lastImportDate || 'Yeni'
+    if (notifiedRef.current.importLabel === label) return
+    notifiedRef.current.importLabel = label
+    showNotif('Yeni Liste Yüklendi', `${label} tarihli öğrenci listesi güncellendi.`, 'import')
+  }, [authReady, teacherId, hasNewImport, config.lastImportLabel, config.lastImportDate])
+
+  // 2. Yeni işletme bildirimi
+  useEffect(() => {
+    if (!authReady || !teacherId) return
+    const count = newBusinesses.length
+    if (count === 0 || notifiedRef.current.biz) return
+    notifiedRef.current.biz = true
+    showNotif('Yeni İşletme', `${count} yeni işletme listenize eklendi.`, 'new-biz')
+  }, [authReady, teacherId, newBusinesses.length])
+
+  // 3. Yeni öğrenci bildirimi
+  useEffect(() => {
+    if (!authReady || !teacherId) return
+    const count = newStudents.length
+    if (count === 0 || notifiedRef.current.stu) return
+    notifiedRef.current.stu = true
+    showNotif('Yeni Öğrenci', `${count} yeni öğrenci listenize eklendi.`, 'new-stu')
+  }, [authReady, teacherId, newStudents.length])
+
   // ---- persist yardımcıları (localStorage + Supabase) ----
   function persistGroups(next) {
     setGroups(next)
@@ -320,6 +370,10 @@ export function AppProvider({ children }) {
     await loadTeacherData(id)
     const t = teachersList.find((x) => x.id === id)
     addLog(t?.name || id, 'Öğretmen', 'Giriş')
+    // Form submit bağlamında bildirim izni iste (kullanıcı hareketi gerekli)
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {})
+    }
     return { ok: true }
   }
   async function logout() {
