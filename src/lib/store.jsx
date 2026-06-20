@@ -297,6 +297,24 @@ export function AppProvider({ children }) {
     ensureAdminSession().then((ok) => { if (ok) loadAdminData() })
   }, [adminId])
 
+  // Admin paneli: öğretmen PIN değişikliklerini Realtime ile anlık yansıt
+  useEffect(() => {
+    if (!adminId) return
+    const ch = adminSupabase
+      .channel('admin-secrets-watch')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'teacher_secrets' },
+        ({ new: row }) => {
+          setAdminTeachersList((prev) =>
+            prev.map((t) => (t.id === row.teacher_id ? { ...t, pin: row.pin } : t)),
+          )
+        },
+      )
+      .subscribe()
+    return () => { adminSupabase.removeChannel(ch) }
+  }, [adminId])
+
   // teacherIdRef'i güncel tut (Realtime/visibility callback'leri stale closure'dan etkilenmesin)
   useEffect(() => { teacherIdRef.current = teacherId }, [teacherId])
 
@@ -637,11 +655,43 @@ export function AppProvider({ children }) {
       previous: previous.businesses.length > 0 ? previous : null,
     })
 
+    // 2.5. Yeni öğretmenleri tespit et ve otomatik hesap aç (PIN: 1234)
+    const existingNames = new Set(teachersList.map((t) => t.name))
+    const newTeacherNames = next.teachers.filter((t) => !existingNames.has(t.name))
+    const newlyCreated = []
+    for (const nt of newTeacherNames) {
+      const id = slugify(nt.name)
+      const { error: signErr } = await adminSupabase.auth.signUp({
+        email: teacherEmail(id),
+        password: pinToPassword('1234'),
+      })
+      if (signErr) {
+        console.warn('Yeni öğretmen hesabı açılamadı:', nt.name, signErr.message)
+        continue
+      }
+      // signUp (e-posta onayı kapalıysa) admin oturumunu değiştirir — geri al
+      await ensureAdminSession()
+      const { error: tErr } = await adminSupabase
+        .from('teachers')
+        .insert({ id, name: nt.name, business_count: 0, student_count: 0 })
+      if (tErr) { console.warn('Öğretmen tablosuna eklenemedi:', nt.name, tErr.message); continue }
+      await adminSupabase.from('teacher_secrets').insert({ teacher_id: id, pin: '1234' })
+      newlyCreated.push({ id, name: nt.name, pin: '1234', businessCount: 0, studentCount: 0 })
+    }
+    if (newlyCreated.length > 0) {
+      setTeachersList((prev) => [...prev, ...newlyCreated])
+      setAdminTeachersList((prev) =>
+        [...prev, ...newlyCreated].sort((a, b) => a.name.localeCompare(b.name, 'tr')),
+      )
+    }
+    // İşlevsel kopyaya yeni öğretmenleri dahil et (state async güncellenir)
+    const allTeachers = [...teachersList, ...newlyCreated]
+
     // 3. Stabil ID'li işletme satırları hazırla
     const bizRows = []
     const bizIdMap = {} // "teacherId|bizName" -> stableId
     for (const b of next.businesses) {
-      const t = teachersList.find((x) => x.name === b.teacherName)
+      const t = allTeachers.find((x) => x.name === b.teacherName)
       if (!t) continue
       const sid = `${t.id}_${slugify(b.name)}`
       bizIdMap[`${t.id}|${b.name}`] = sid
@@ -655,7 +705,7 @@ export function AppProvider({ children }) {
     // 4. Öğrenci satırları hazırla
     const stuRows = []
     for (const b of next.businesses) {
-      const t = teachersList.find((x) => x.name === b.teacherName)
+      const t = allTeachers.find((x) => x.name === b.teacherName)
       if (!t) continue
       const bizId = bizIdMap[`${t.id}|${b.name}`]
       if (!bizId) continue
@@ -674,7 +724,7 @@ export function AppProvider({ children }) {
     // 5. Fesih satırları hazırla
     const termRows = (next.terminated || [])
       .map((t) => ({
-        teacher_id: teachersList.find((x) => x.name === t.teacherName)?.id || t.teacherId || null,
+        teacher_id: allTeachers.find((x) => x.name === t.teacherName)?.id || t.teacherId || null,
         name: t.name || '', no: t.no || '', sube: t.sube || '',
         tel: t.tel || '', business_name: t.businessName || '', date: t.date || importDate,
       }))
@@ -709,7 +759,7 @@ export function AppProvider({ children }) {
     // 10. Öğretmen sayılarını toplu güncelle
     const teacherUpserts = next.teachers
       .map((t) => {
-        const tr = teachersList.find((x) => x.name === t.name)
+        const tr = allTeachers.find((x) => x.name === t.name)
         return tr
           ? { id: tr.id, name: tr.name, business_count: t.businessCount, student_count: t.studentCount }
           : null
