@@ -26,7 +26,18 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* ---- Beceri Eğitimi Değerlendirme Formu yazdırma ---- */
+/* ---- Sayfa ölçeklendirici (ScaledPage bileşeni) ---- */
+.sheet-outer {
+  margin: 8px auto;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  width: -webkit-fit-content;
+  width: fit-content;
+}
+.sheet-inner {
+  transform-origin: top left;
+}
+
+/* ---- Beceri Eğitimi Değerlendirme Formu ---- */
 .print-overlay {
   position: fixed;
   inset: 0;
@@ -37,14 +48,11 @@ body {
 .a4-sheet {
   width: 297mm;
   min-height: 210mm;
-  margin: 8px auto;
   padding: 8mm;
   box-sizing: border-box;
   background: #fff;
   display: flex;
   gap: 6mm;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
-  zoom: var(--sheet-zoom, 1);
 }
 .bform {
   flex: 1 1 0;
@@ -72,15 +80,12 @@ body {
 .fesih-sheet {
   width: 210mm;
   min-height: 297mm;
-  margin: 8px auto;
   padding: 16mm 14mm;
   box-sizing: border-box;
   background: #fff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
   color: #000;
   font-size: 11pt;
   line-height: 1.35;
-  zoom: var(--sheet-zoom, 1);
 }
 .aciklama-box:empty::before {
   content: attr(data-ph);
@@ -98,17 +103,14 @@ body {
 .isyeri-sheet {
   width: 210mm;
   min-height: 297mm;
-  margin: 8px auto;
   padding: 16mm 18mm;
   box-sizing: border-box;
   background: #fff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
   color: #000;
   font-size: 10.5pt;
   line-height: 1.5;
   display: flex;
   flex-direction: column;
-  zoom: var(--sheet-zoom, 1);
 }
 .isyeri-petition {
   flex: 1 1 0;
@@ -132,6 +134,17 @@ body {
     overflow: visible !important;
     background: #fff !important;
   }
+  .sheet-outer {
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+  .sheet-inner {
+    transform: none !important;
+    display: block !important;
+  }
   .a4-sheet {
     page: beceri;
     width: 100%;
@@ -142,7 +155,6 @@ body {
     box-sizing: border-box;
     box-shadow: none;
     page-break-after: always;
-    zoom: 1;
   }
   .fesih-sheet {
     page: fesih;
@@ -154,7 +166,6 @@ body {
     box-sizing: border-box;
     box-shadow: none;
     page-break-after: always;
-    zoom: 1;
   }
   .isyeri-sheet {
     page: fesih;
@@ -166,7 +177,6 @@ body {
     box-sizing: border-box;
     box-shadow: none;
     page-break-after: always;
-    zoom: 1;
   }
   @page beceri {
     size: A4 landscape;

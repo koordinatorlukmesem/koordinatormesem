@@ -1,16 +1,5 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useRef } from 'react'
-
-const MM_TO_PX = 96 / 25.4
-function useSheetZoom(widthMm) {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (!ref.current) return
-    const zoom = Math.min(1, (window.innerWidth - 8) / (widthMm * MM_TO_PX))
-    ref.current.style.setProperty('--sheet-zoom', zoom)
-  }, [widthMm])
-  return ref
-}
+import ScaledPage from './ScaledPage.jsx'
 
 function Field({ label, value, lw = '40mm' }) {
   return (
@@ -80,9 +69,8 @@ function pair(list) {
 
 export default function IsyeriFesihPrint({ students, school, onClose }) {
   const sheets = pair(students)
-  const overlayRef = useSheetZoom(210)
   return createPortal(
-    <div className="print-overlay" ref={overlayRef}>
+    <div className="print-overlay">
       <div className="no-print sticky top-0 z-10 flex items-center justify-between gap-2 bg-slate-800 px-4 py-3 text-white">
         <div className="text-sm">
           <p className="font-semibold">İşyeri Fesih Formu</p>
@@ -109,11 +97,13 @@ export default function IsyeriFesihPrint({ students, school, onClose }) {
       </p>
 
       {sheets.map((p, i) => (
-        <div key={i} className="isyeri-sheet">
-          {p[0] && <Petition s={p[0]} school={school} />}
-          <div className="isyeri-divider" />
-          {p[1] ? <Petition s={p[1]} school={school} /> : <div className="isyeri-petition" />}
-        </div>
+        <ScaledPage key={i} widthMm={210} heightMm={297}>
+          <div className="isyeri-sheet">
+            {p[0] && <Petition s={p[0]} school={school} />}
+            <div className="isyeri-divider" />
+            {p[1] ? <Petition s={p[1]} school={school} /> : <div className="isyeri-petition" />}
+          </div>
+        </ScaledPage>
       ))}
     </div>,
     document.body,

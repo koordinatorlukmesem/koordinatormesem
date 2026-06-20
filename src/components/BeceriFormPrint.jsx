@@ -1,16 +1,5 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useRef } from 'react'
-
-const MM_TO_PX = 96 / 25.4
-function useSheetZoom(widthMm) {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (!ref.current) return
-    const zoom = Math.min(1, (window.innerWidth - 8) / (widthMm * MM_TO_PX))
-    ref.current.style.setProperty('--sheet-zoom', zoom)
-  }, [widthMm])
-  return ref
-}
+import ScaledPage from './ScaledPage.jsx'
 
 // Değerlendirme bölümleri (puanlar elle doldurulacak)
 const SECTIONS = [
@@ -167,10 +156,9 @@ function pair(list) {
 
 export default function BeceriFormPrint({ students, onClose }) {
   const sheets = pair(students)
-  const overlayRef = useSheetZoom(297)
 
   return createPortal(
-    <div className="print-overlay" ref={overlayRef}>
+    <div className="print-overlay">
       <div className="no-print sticky top-0 z-10 flex items-center justify-between gap-2 bg-slate-800 px-4 py-3 text-white">
         <div className="text-sm">
           <p className="font-semibold">Beceri Eğitimi Değerlendirme Formu</p>
@@ -197,10 +185,12 @@ export default function BeceriFormPrint({ students, onClose }) {
       </p>
 
       {sheets.map((p, i) => (
-        <div key={i} className="a4-sheet">
-          {p[0] ? <BeceriForm s={p[0]} /> : <div className="bform-empty" />}
-          {p[1] ? <BeceriForm s={p[1]} /> : <div className="bform-empty" />}
-        </div>
+        <ScaledPage key={i} widthMm={297} heightMm={210}>
+          <div className="a4-sheet">
+            {p[0] ? <BeceriForm s={p[0]} /> : <div className="bform-empty" />}
+            {p[1] ? <BeceriForm s={p[1]} /> : <div className="bform-empty" />}
+          </div>
+        </ScaledPage>
       ))}
     </div>,
     document.body,

@@ -1,16 +1,5 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useRef } from 'react'
-
-const MM_TO_PX = 96 / 25.4
-function useSheetZoom(widthMm) {
-  const ref = useRef(null)
-  useEffect(() => {
-    if (!ref.current) return
-    const zoom = Math.min(1, (window.innerWidth - 8) / (widthMm * MM_TO_PX))
-    ref.current.style.setProperty('--sheet-zoom', zoom)
-  }, [widthMm])
-  return ref
-}
+import ScaledPage from './ScaledPage.jsx'
 
 const today = new Date().toISOString().slice(0, 10)
 
@@ -93,9 +82,8 @@ function FesihForm({ s, school }) {
 }
 
 export default function OgretmenFesihPrint({ students, school, onClose }) {
-  const overlayRef = useSheetZoom(210)
   return createPortal(
-    <div className="print-overlay" ref={overlayRef}>
+    <div className="print-overlay">
       <div className="no-print sticky top-0 z-10 flex items-center justify-between gap-2 bg-slate-800 px-4 py-3 text-white">
         <div className="text-sm">
           <p className="font-semibold">Öğretmen Fesih Formu (Tek Taraflı)</p>
@@ -122,7 +110,9 @@ export default function OgretmenFesihPrint({ students, school, onClose }) {
       </p>
 
       {students.map((s) => (
-        <FesihForm key={s.id} s={s} school={school} />
+        <ScaledPage key={s.id} widthMm={210} heightMm={297}>
+          <FesihForm s={s} school={school} />
+        </ScaledPage>
       ))}
     </div>,
     document.body,
