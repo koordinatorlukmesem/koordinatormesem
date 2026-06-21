@@ -54,6 +54,21 @@ function chunk(arr, size) {
   return out
 }
 
+// Supabase varsayılan 1000 satır limitini aşmak için tüm satırları sayfalı çek.
+// (Diff için eski işletme/öğrenci ID'lerinin TAMAMI gerekir; eksik liste
+//  1000. satırdan sonraki kayıtları yanlışlıkla "yeni" gösterir.)
+async function fetchAllRows(client, table, columns) {
+  const out = []
+  const size = 1000
+  for (let from = 0; ; from += size) {
+    const { data, error } = await client.from(table).select(columns).range(from, from + size - 1)
+    if (error) throw new Error(`${table} okunamadı: ${error.message}`)
+    out.push(...(data || []))
+    if (!data || data.length < size) break
+  }
+  return out
+}
+
 export function AppProvider({ children }) {
   // --- admin (UI kimlik doğrulama) ---
   const [admins, setAdmins]     = useState(() => readJSON(ADMINS_KEY, DEFAULT_ADMINS))
@@ -620,12 +635,13 @@ export function AppProvider({ children }) {
 
   // ---- admin: Excel import → Supabase ----
   async function importExcel(file) {
-    // 1. Mevcut Supabase verisini "previous" olarak çek (diff için)
-    const [{ data: curBizes, error: e1 }, { data: curStus, error: e2 }] = await Promise.all([
-      adminSupabase.from('businesses').select('id, teacher_id, name'),
-      adminSupabase.from('students').select('id, business_id, no, name, sube, tel'),
+    // 1. Mevcut Supabase verisini "previous" olarak çek (diff için).
+    //    1000 satır limitini aşmak için sayfalı çekiyoruz; aksi halde 1000.
+    //    satırdan sonraki işletme/öğrenciler diff'te yanlışlıkla "yeni" görünür.
+    const [curBizes, curStus] = await Promise.all([
+      fetchAllRows(adminSupabase, 'businesses', 'id, teacher_id, name'),
+      fetchAllRows(adminSupabase, 'students', 'id, business_id, no, name, sube, tel'),
     ])
-    if (e1 || e2) throw new Error('Mevcut veri okunamadı: ' + (e1?.message || e2?.message))
 
     const curStuByBiz = {}
     for (const s of curStus || []) (curStuByBiz[s.business_id] ||= []).push(s)

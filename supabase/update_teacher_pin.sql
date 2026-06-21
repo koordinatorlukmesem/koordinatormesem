@@ -25,12 +25,9 @@ begin
 
   v_teacher_id := split_part(v_email, '@', 1);
 
-  update public.teacher_secrets
-  set pin = new_pin
-  where teacher_id = v_teacher_id;
-
-  if not found then
-    raise exception 'Öğretmen kaydı bulunamadı: %', v_teacher_id;
-  end if;
+  -- Upsert: teacher_secrets satırı yoksa (eski öğretmenler) oluştur, varsa güncelle.
+  insert into public.teacher_secrets (teacher_id, pin)
+  values (v_teacher_id, new_pin)
+  on conflict (teacher_id) do update set pin = excluded.pin;
 end;
 $$;
