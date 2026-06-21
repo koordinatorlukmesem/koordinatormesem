@@ -210,47 +210,49 @@ export function AppProvider({ children }) {
     localStorage.setItem(ackKey(tid),      JSON.stringify(finalAck))
     localStorage.setItem(controlsKey(tid), JSON.stringify(finalControls))
 
-    // ---- Çırağı kalmayan işletmeler ----
-    // Yeni listede artık bulunmayan ama bir gruba eklenmiş işletmeleri tespit et:
-    // gruptan düşür ve "çırağı kalmayan" listesine taşı. İsimleri bir önceki
-    // yüklemeden saklanan snapshot'tan alırız (işletme DB'den silinmiş olur).
+    // ---- Çırağı kalmayan işletmeler (yalnız BİR ÖNCEKİ listeye göre) ----
+    // snapshot = bu cihazın gördüğü önceki listenin id→{ad,dal} haritası.
+    // Yeni liste snapshot'tan farklıysa (import olmuş) bir önceki listeye göre
+    // düşen, gruba ekli işletmeleri tespit et: gruptan çıkar + kart listesini
+    // SIFIRDAN oluştur (geçmiş birikmez). Liste değişmemişse mevcut kart kalır.
     const currentIds = new Set(list.map((b) => b.id))
     const snap = readJSON(bizSnapKey(tid), {})
-    const lostMap = new Map(readJSON(lostKey(tid), []).map((b) => [b.id, b]))
+    const prevIds = Object.keys(snap)
+    const importHappened =
+      prevIds.length > 0 &&
+      (prevIds.length !== currentIds.size || prevIds.some((id) => !currentIds.has(id)))
 
-    let groupsChanged = false
-    const reconciledGroups = finalGroups.map((g) => {
-      const kept = g.businessIds.filter((bid) => {
-        if (currentIds.has(bid)) return true
-        // kaybolmuş işletme: snapshot'ta ismi varsa kayıp listesine ekle
-        if (!lostMap.has(bid) && snap[bid]) lostMap.set(bid, { id: bid, ...snap[bid] })
-        groupsChanged = true
-        return false
+    let nextGroups = finalGroups
+    if (importHappened) {
+      const lost = []
+      nextGroups = finalGroups.map((g) => {
+        const kept = g.businessIds.filter((bid) => {
+          if (currentIds.has(bid)) return true
+          if (snap[bid]) lost.push({ id: bid, ...snap[bid] })
+          return false
+        })
+        return kept.length === g.businessIds.length ? g : { ...g, businessIds: kept }
       })
-      return kept.length === g.businessIds.length ? g : { ...g, businessIds: kept }
-    })
-    // Geri dönen işletmeleri kayıp listesinden çıkar
-    for (const id of currentIds) lostMap.delete(id)
+      setLostBusinesses(lost)
+      localStorage.setItem(lostKey(tid), JSON.stringify(lost))
+      if (JSON.stringify(nextGroups) !== JSON.stringify(finalGroups)) {
+        supabase
+          .from('teacher_state')
+          .update({ groups: nextGroups })
+          .eq('teacher_id', tid)
+          .then(({ error }) => error && console.warn('grup uzlaştırma:', error.message))
+      }
+    } else {
+      setLostBusinesses(readJSON(lostKey(tid), []))
+    }
 
-    const nextLost = [...lostMap.values()]
-    setLostBusinesses(nextLost)
-    localStorage.setItem(lostKey(tid), JSON.stringify(nextLost))
-
-    // Snapshot'ı güncel listeyle yenile (sonraki import diff'i için)
+    // Snapshot'ı güncel listeyle yenile (bir sonraki import diff'i için)
     const nextSnap = {}
-    for (const b of list) nextSnap[b.id] = { name: b.name, dal: b.dal, phone: b.phone }
+    for (const b of list) nextSnap[b.id] = { name: b.name, dal: b.dal }
     localStorage.setItem(bizSnapKey(tid), JSON.stringify(nextSnap))
 
-    setGroups(reconciledGroups)
-    localStorage.setItem(groupsKey(tid), JSON.stringify(reconciledGroups))
-    // Gruplar değiştiyse yalnız groups alanını güncelle (seen_import_date'i ezme)
-    if (groupsChanged) {
-      supabase
-        .from('teacher_state')
-        .update({ groups: reconciledGroups })
-        .eq('teacher_id', tid)
-        .then(({ error }) => error && console.warn('grup uzlaştırma:', error.message))
-    }
+    setGroups(nextGroups)
+    localStorage.setItem(groupsKey(tid), JSON.stringify(nextGroups))
 
     if (s?.seen_import_date) {
       setSeenImport(s.seen_import_date)
@@ -768,6 +770,24 @@ export function AppProvider({ children }) {
         [...prev, ...newlyCreated].sort((a, b) => a.name.localeCompare(b.name, 'tr')),
       )
     }
+
+    // 2.6. Yeni listede artık adı geçmeyen öğretmenleri sil.
+    //   teachers silinince businesses/students/terminated/teacher_state/
+    //   teacher_secrets FK cascade ile otomatik temizlenir.
+    const newNames = new Set(next.teachers.map((t) => t.name))
+    const removedTeachers = teachersList.filter((t) => !newNames.has(t.name))
+    if (removedTeachers.length > 0) {
+      const removedIds = removedTeachers.map((t) => t.id)
+      const { error: delTeacherErr } = await adminSupabase
+        .from('teachers').delete().in('id', removedIds)
+      if (delTeacherErr) {
+        console.warn('Öğretmen silme hatası:', delTeacherErr.message)
+      } else {
+        setTeachersList((prev) => prev.filter((t) => !removedIds.includes(t.id)))
+        setAdminTeachersList((prev) => prev.filter((t) => !removedIds.includes(t.id)))
+      }
+    }
+
     // İşlevsel kopyaya yeni öğretmenleri dahil et (state async güncellenir)
     const allTeachers = [...teachersList, ...newlyCreated]
 
