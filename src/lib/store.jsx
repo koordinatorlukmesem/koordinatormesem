@@ -620,9 +620,22 @@ export function AppProvider({ children }) {
     if (e1) return { ok: false, error: 'Mevcut PIN hatalı.' }
     const { error: e2 } = await supabase.auth.updateUser({ password: pinToPassword(newPin) })
     if (e2) return { ok: false, error: e2.message }
-    // teacher_secrets'i RPC ile güncelle; direct update RLS'i eski öğretmenlerde bloklar
-    const { error: e3 } = await supabase.rpc('update_teacher_pin', { new_pin: String(newPin) })
-    if (e3) console.warn('teacher_secrets PIN güncelleme:', e3.message)
+
+    // teacher_secrets'i güncelle (admin paneldeki PIN görünümü için):
+    //  1) Doğrudan update — RLS politikası teacher_secrets_own_update; tüm
+    //     öğretmenlerin JWT'sinde app_metadata.teacher_id olduğundan çalışır.
+    //  2) Yedek: update_teacher_pin RPC (security definer) — satır yoksa upsert
+    //     eder ve RLS'i atlar.
+    // İkisi de başarısız olursa kullanıcıya gerçek hatayı bildir (sessizce yutma).
+    const { error: e3 } = await supabase
+      .from('teacher_secrets')
+      .update({ pin: String(newPin) })
+      .eq('teacher_id', id)
+    const { error: e4 } = await supabase.rpc('update_teacher_pin', { new_pin: String(newPin) })
+    if (e3 && e4) {
+      console.warn('teacher_secrets PIN güncelleme:', e3.message, '|', e4.message)
+      return { ok: false, error: 'PIN girişte değişti ama kaydedilemedi: ' + e4.message }
+    }
     return { ok: true }
   }
 
