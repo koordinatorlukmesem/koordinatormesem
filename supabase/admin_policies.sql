@@ -25,11 +25,13 @@ create policy teachers_admin on public.teachers
   for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
 
--- ---- teacher_secrets: admin okur (PIN görüntüleme) ----
+-- ---- teacher_secrets: admin okur + yazar (PIN görüntüleme + yeni öğretmen 1234) ----
+-- Eski salt-okuma politikasını kaldır; admin yeni öğretmen PIN'i de ekleyebilmeli.
 drop policy if exists teacher_secrets_admin_read on public.teacher_secrets;
-create policy teacher_secrets_admin_read on public.teacher_secrets
-  for select to authenticated
-  using (public.is_admin());
+drop policy if exists teacher_secrets_admin on public.teacher_secrets;
+create policy teacher_secrets_admin on public.teacher_secrets
+  for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
 
 -- ---- teacher_secrets: öğretmen kendi PIN'ini güncelleyebilir ----
 drop policy if exists teacher_secrets_own_update on public.teacher_secrets;

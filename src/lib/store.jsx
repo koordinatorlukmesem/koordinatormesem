@@ -749,7 +749,11 @@ export function AppProvider({ children }) {
         .from('teachers')
         .insert({ id, name: nt.name, business_count: 0, student_count: 0 })
       if (tErr) { console.warn('Öğretmen tablosuna eklenemedi:', nt.name, tErr.message); continue }
-      await adminSupabase.from('teacher_secrets').insert({ teacher_id: id, pin: '1234' })
+      // PIN'i upsert et (admin RLS: teacher_secrets_admin). Hata olursa görünür kıl.
+      const { error: secErr } = await adminSupabase
+        .from('teacher_secrets')
+        .upsert({ teacher_id: id, pin: '1234' }, { onConflict: 'teacher_id' })
+      if (secErr) console.warn('Yeni öğretmen PIN kaydı (1234) yazılamadı:', nt.name, secErr.message)
       newlyCreated.push({ id, name: nt.name, pin: '1234', businessCount: 0, studentCount: 0 })
     }
     if (newlyCreated.length > 0) {
