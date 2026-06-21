@@ -26,4 +26,15 @@ create trigger set_teacher_id_on_signup
 
 -- 2. teacher_secrets Realtime yayınına ekle:
 --    admin paneli öğretmen PIN değişikliklerini anlık görsün.
-alter publication supabase_realtime add table public.teacher_secrets;
+--    (Zaten eklenmişse hata vermesin diye koşullu ekleriz.)
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'teacher_secrets'
+  ) then
+    alter publication supabase_realtime add table public.teacher_secrets;
+  end if;
+end $$;

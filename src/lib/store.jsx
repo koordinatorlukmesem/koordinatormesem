@@ -729,32 +729,36 @@ export function AppProvider({ children }) {
       previous: previous.businesses.length > 0 ? previous : null,
     })
 
-    // 2.5. Yeni öğretmenleri tespit et ve otomatik hesap aç (PIN: 1234)
+    // 2.5. Yeni öğretmenleri tespit et ve API ile otomatik hesap aç (PIN: 1234).
+    //   Tarayıcı service role kullanamaz; signUp ise proje ayarlarına (signup
+    //   kapalı / e-posta onayı) takılır. Bu yüzden /api/create-teacher (service
+    //   role) üzerinden güvenilir şekilde oluşturuyoruz.
     const existingNames = new Set(teachersList.map((t) => t.name))
-    const newTeacherNames = next.teachers.filter((t) => !existingNames.has(t.name))
-    const newlyCreated = []
-    for (const nt of newTeacherNames) {
-      const id = slugify(nt.name)
-      const { error: signErr } = await adminSupabase.auth.signUp({
-        email: teacherEmail(id),
-        password: pinToPassword('1234'),
+    const newTeacherDefs = next.teachers
+      .filter((t) => !existingNames.has(t.name))
+      .map((t) => ({ id: slugify(t.name), name: t.name }))
+
+    let newlyCreated = []
+    if (newTeacherDefs.length > 0) {
+      const { data: { session } } = await adminSupabase.auth.getSession()
+      const resp = await fetch('/api/create-teacher', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ teachers: newTeacherDefs }),
       })
-      if (signErr) {
-        console.warn('Yeni öğretmen hesabı açılamadı:', nt.name, signErr.message)
-        continue
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        throw new Error('Yeni öğretmen oluşturulamadı: ' + (json.error || resp.status))
       }
-      // signUp (e-posta onayı kapalıysa) admin oturumunu değiştirir — geri al
-      await ensureAdminSession()
-      const { error: tErr } = await adminSupabase
-        .from('teachers')
-        .insert({ id, name: nt.name, business_count: 0, student_count: 0 })
-      if (tErr) { console.warn('Öğretmen tablosuna eklenemedi:', nt.name, tErr.message); continue }
-      // PIN'i upsert et (admin RLS: teacher_secrets_admin). Hata olursa görünür kıl.
-      const { error: secErr } = await adminSupabase
-        .from('teacher_secrets')
-        .upsert({ teacher_id: id, pin: '1234' }, { onConflict: 'teacher_id' })
-      if (secErr) console.warn('Yeni öğretmen PIN kaydı (1234) yazılamadı:', nt.name, secErr.message)
-      newlyCreated.push({ id, name: nt.name, pin: '1234', businessCount: 0, studentCount: 0 })
+      if (json.failed?.length) {
+        console.warn('Bazı öğretmenler oluşturulamadı:', json.failed)
+      }
+      newlyCreated = (json.created || []).map((t) => ({
+        id: t.id, name: t.name, pin: '1234', businessCount: 0, studentCount: 0,
+      }))
     }
     if (newlyCreated.length > 0) {
       setTeachersList((prev) => [...prev, ...newlyCreated])
