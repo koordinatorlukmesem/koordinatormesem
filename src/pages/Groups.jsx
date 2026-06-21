@@ -20,6 +20,7 @@ export default function Groups() {
     ungroupedBusinesses,
     newStudents,
     terminated,
+    lostBusinesses,
     lastImportLabel,
     addBusinessToGroup,
     acknowledgeStudent,
@@ -299,6 +300,34 @@ export default function Groups() {
             </>
           )}
         </SpecialCard>
+
+        {/* ---- Çırağı Kalmayan İşletmeler (en altta) ---- */}
+        <SpecialCard
+          open={open === 'lost'}
+          onToggle={() => toggle('lost')}
+          color="slate"
+          icon="🏚️"
+          title="Çırağı Kalmayan İşletmeler"
+          count={lostBusinesses.length}
+        >
+          {lostBusinesses.length === 0 ? (
+            <Empty text="Listeden düşen işletme yok." />
+          ) : (
+            <>
+              <p className="mb-2 rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
+                Yeni listede yer almadığı için gruplarınızdan çıkarıldı.
+              </p>
+              <ul className="space-y-2">
+                {lostBusinesses.map((b) => (
+                  <li key={b.id} className="rounded-lg bg-slate-50 p-2.5">
+                    <p className="truncate text-sm font-semibold text-slate-800">{b.name}</p>
+                    {b.dal && <p className="truncate text-xs text-slate-500">{b.dal}</p>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </SpecialCard>
       </div>
 
       {/* Onay modalı */}
@@ -349,6 +378,7 @@ const COLORS = {
   sky: 'border-sky-200 bg-sky-50 text-sky-700',
   rose: 'border-rose-200 bg-rose-50 text-rose-700',
   amber: 'border-amber-200 bg-amber-50 text-amber-700',
+  slate: 'border-slate-300 bg-slate-100 text-slate-700',
 }
 
 function SpecialCard({ open, onToggle, color, icon, title, count, children }) {

@@ -20,6 +20,8 @@ const groupsKey    = (id) => `mesem.groups.${id}`
 const ackKey       = (id) => `mesem.ack.${id}`
 const controlsKey  = (id) => `mesem.controls.${id}`
 const seenImportKey = (id) => `mesem.seenimport.${id}`
+const lostKey       = (id) => `mesem.lost.${id}`       // çırağı kalmayan işletmeler
+const bizSnapKey    = (id) => `mesem.bizsnap.${id}`    // işletme adı/dal anlık görüntüsü
 
 const AppContext = createContext(null)
 
@@ -90,6 +92,7 @@ export function AppProvider({ children }) {
   const [ack, setAck]           = useState([])
   const [controls, setControls] = useState({})
   const [seenImport, setSeenImport] = useState(null)
+  const [lostBusinesses, setLostBusinesses] = useState([])
 
   // bildirim tracker: bu oturumda hangi bildirimler gönderildi
   const notifiedRef = useRef({ importLabel: null, biz: false, stu: false })
@@ -202,12 +205,52 @@ export function AppProvider({ children }) {
     const finalAck      = dbAck.length > 0                   ? dbAck      : localAck
     const finalControls = Object.keys(dbControls).length > 0 ? dbControls : localControls
 
-    setGroups(finalGroups)
     setAck(finalAck)
     setControls(finalControls)
-    localStorage.setItem(groupsKey(tid),   JSON.stringify(finalGroups))
     localStorage.setItem(ackKey(tid),      JSON.stringify(finalAck))
     localStorage.setItem(controlsKey(tid), JSON.stringify(finalControls))
+
+    // ---- Çırağı kalmayan işletmeler ----
+    // Yeni listede artık bulunmayan ama bir gruba eklenmiş işletmeleri tespit et:
+    // gruptan düşür ve "çırağı kalmayan" listesine taşı. İsimleri bir önceki
+    // yüklemeden saklanan snapshot'tan alırız (işletme DB'den silinmiş olur).
+    const currentIds = new Set(list.map((b) => b.id))
+    const snap = readJSON(bizSnapKey(tid), {})
+    const lostMap = new Map(readJSON(lostKey(tid), []).map((b) => [b.id, b]))
+
+    let groupsChanged = false
+    const reconciledGroups = finalGroups.map((g) => {
+      const kept = g.businessIds.filter((bid) => {
+        if (currentIds.has(bid)) return true
+        // kaybolmuş işletme: snapshot'ta ismi varsa kayıp listesine ekle
+        if (!lostMap.has(bid) && snap[bid]) lostMap.set(bid, { id: bid, ...snap[bid] })
+        groupsChanged = true
+        return false
+      })
+      return kept.length === g.businessIds.length ? g : { ...g, businessIds: kept }
+    })
+    // Geri dönen işletmeleri kayıp listesinden çıkar
+    for (const id of currentIds) lostMap.delete(id)
+
+    const nextLost = [...lostMap.values()]
+    setLostBusinesses(nextLost)
+    localStorage.setItem(lostKey(tid), JSON.stringify(nextLost))
+
+    // Snapshot'ı güncel listeyle yenile (sonraki import diff'i için)
+    const nextSnap = {}
+    for (const b of list) nextSnap[b.id] = { name: b.name, dal: b.dal, phone: b.phone }
+    localStorage.setItem(bizSnapKey(tid), JSON.stringify(nextSnap))
+
+    setGroups(reconciledGroups)
+    localStorage.setItem(groupsKey(tid), JSON.stringify(reconciledGroups))
+    // Gruplar değiştiyse yalnız groups alanını güncelle (seen_import_date'i ezme)
+    if (groupsChanged) {
+      supabase
+        .from('teacher_state')
+        .update({ groups: reconciledGroups })
+        .eq('teacher_id', tid)
+        .then(({ error }) => error && console.warn('grup uzlaştırma:', error.message))
+    }
 
     if (s?.seen_import_date) {
       setSeenImport(s.seen_import_date)
@@ -339,8 +382,9 @@ export function AppProvider({ children }) {
       setGroups(readJSON(groupsKey(teacherId), []))
       setAck(readJSON(ackKey(teacherId), []))
       setControls(readJSON(controlsKey(teacherId), {}))
+      setLostBusinesses(readJSON(lostKey(teacherId), []))
     } else {
-      setGroups([]); setAck([]); setControls({}); setSeenImport(null)
+      setGroups([]); setAck([]); setControls({}); setSeenImport(null); setLostBusinesses([])
     }
   }, [teacherId])
 
@@ -878,6 +922,7 @@ export function AppProvider({ children }) {
     newBusinesses,
     ungroupedBusinesses,
     newStudents,
+    lostBusinesses,
     hasNewImport,
     markImportSeen,
     controls,
