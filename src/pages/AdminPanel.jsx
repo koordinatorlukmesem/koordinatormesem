@@ -149,6 +149,14 @@ export default function AdminPanel() {
               <Mini value={summary.terminated} label="Fesih" tone="red" />
             </div>
           )}
+          {summary && (summary.newTeacherDetected > 0 || summary.newTeacherCreated > 0) && (
+            <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+              Yeni öğretmen: {summary.newTeacherDetected} tespit, {summary.newTeacherCreated} oluşturuldu (PIN 1234)
+              {summary.newTeacherFailed?.length > 0 &&
+                ` — ${summary.newTeacherFailed.length} başarısız: ` +
+                summary.newTeacherFailed.map((f) => `${f.id} (${f.error})`).join(', ')}
+            </p>
+          )}
 
           {/* Önceki yüklemeler (akordiyon) */}
           {imports.length > 0 && (

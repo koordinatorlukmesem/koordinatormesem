@@ -739,6 +739,7 @@ export function AppProvider({ children }) {
       .map((t) => ({ id: slugify(t.name), name: t.name }))
 
     let newlyCreated = []
+    let teacherFailed = []
     if (newTeacherDefs.length > 0) {
       const { data: { session } } = await adminSupabase.auth.getSession()
       const resp = await fetch('/api/create-teacher', {
@@ -753,9 +754,8 @@ export function AppProvider({ children }) {
       if (!resp.ok) {
         throw new Error('Yeni öğretmen oluşturulamadı: ' + (json.error || resp.status))
       }
-      if (json.failed?.length) {
-        console.warn('Bazı öğretmenler oluşturulamadı:', json.failed)
-      }
+      teacherFailed = json.failed || []
+      if (teacherFailed.length) console.warn('Bazı öğretmenler oluşturulamadı:', teacherFailed)
       newlyCreated = (json.created || []).map((t) => ({
         id: t.id, name: t.name, pin: '1234', businessCount: 0, studentCount: 0,
       }))
@@ -915,6 +915,9 @@ export function AppProvider({ children }) {
       newBiz:  bizRows.filter((b) => b.is_new).length,
       newStu:  stuRows.filter((s) => s.is_new).length,
       terminated: termRows.length,
+      newTeacherDetected: newTeacherDefs.length,
+      newTeacherCreated: newlyCreated.length,
+      newTeacherFailed: teacherFailed,
     }
   }
 
