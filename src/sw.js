@@ -7,11 +7,6 @@ precacheAndRoute(self.__WB_MANIFEST)
 // SPA: /gruplar, /raporlar gibi rotalar index.html'den yüklensin (404 önler)
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
 
-// Yeni SW aktif olunca tüm sekmeler devralınsın (hemen yenileme)
-self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim())
-})
-
 // Yenile butonunda vite-plugin-pwa'nın gönderdiği mesajı dinle
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
