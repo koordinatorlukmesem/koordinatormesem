@@ -80,7 +80,7 @@ export function AppProvider({ children }) {
   const [adminTeachersList, setAdminTeachersList] = useState([])
 
   // --- öğretmen (Supabase) ---
-  const [config, setConfig]         = useState({ school: '', lastImportDate: null, lastImportLabel: '' })
+  const [config, setConfig]         = useState({ school: '', lastImportDate: null, lastImportLabel: '', lastImportFile: '' })
   const [teachersList, setTeachersList] = useState([])
   const [teacherId, setTeacherId]   = useState(null)
   const [businesses, setBusinesses] = useState([])
@@ -287,6 +287,7 @@ export function AppProvider({ children }) {
           school: cfg.data.school,
           lastImportDate: cfg.data.last_import_date,
           lastImportLabel: cfg.data.last_import_label,
+          lastImportFile: cfg.data.last_import_file || '',
         })
       if (tl.data) {
         const sorted = [...tl.data].sort((a, b) => a.name.localeCompare(b.name, 'tr'))
@@ -315,11 +316,12 @@ export function AppProvider({ children }) {
           if (!mounted) return
           const newDate = payload.new?.last_import_date
           const newLabel = payload.new?.last_import_label || ''
+          const newFile = payload.new?.last_import_file || ''
           if (!newDate) return
           setConfig((c) =>
-            c.lastImportDate === newDate
+            c.lastImportDate === newDate && c.lastImportFile === newFile
               ? c
-              : { ...c, lastImportDate: newDate, lastImportLabel: newLabel },
+              : { ...c, lastImportDate: newDate, lastImportLabel: newLabel, lastImportFile: newFile },
           )
           const tid = teacherIdRef.current
           if (tid) {
@@ -872,7 +874,11 @@ export function AppProvider({ children }) {
       last_import_date: importDate,
       last_import_label: label,
     }).eq('id', 1)
-    setConfig((c) => ({ ...c, lastImportDate: importDate, lastImportLabel: label }))
+    // Dosya adını ayrı yaz: kolon henüz eklenmemişse (last_import_file.sql
+    // çalıştırılmadıysa) import bozulmasın, hatayı yut.
+    adminSupabase.from('app_config').update({ last_import_file: file.name }).eq('id', 1)
+      .then(({ error }) => error && console.warn('last_import_file:', error.message))
+    setConfig((c) => ({ ...c, lastImportDate: importDate, lastImportLabel: label, lastImportFile: file.name }))
 
     // 11b. Sadece gerçekten yeni öğesi olan öğretmenleri push listesine al
     const teacherStats = {}
@@ -925,6 +931,7 @@ export function AppProvider({ children }) {
     authReady,
     school: config.school,
     lastImportLabel: config.lastImportLabel,
+    lastImportFile: config.lastImportFile,
     teachers: teachersList,
     teacher,
     businesses,

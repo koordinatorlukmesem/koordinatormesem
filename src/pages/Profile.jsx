@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../lib/store.jsx'
 
 export default function Profile() {
-  const { teacher, school, logout, changePin } = useApp()
+  const { teacher, school, logout, changePin, lastImportFile, lastImportLabel } = useApp()
   const [oldPin, setOldPin] = useState('')
   const [newPin, setNewPin] = useState('')
   const [newPin2, setNewPin2] = useState('')
@@ -51,6 +51,26 @@ export default function Profile() {
             </div>
           </div>
         </div>
+
+        {/* Son yüklenen Excel dosyası */}
+        {lastImportFile && (
+          <div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 3v4a1 1 0 001 1h4" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8l-5-5z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.5 12l2.5 4m0-4l-2.5 4" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-slate-400">Son Yüklenen Liste</p>
+              <p className="truncate text-sm font-bold text-slate-800">{lastImportFile}</p>
+              {lastImportLabel && (
+                <p className="text-xs text-slate-500">{lastImportLabel} tarihli</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Şifre değiştir (akordiyon) */}
         <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
