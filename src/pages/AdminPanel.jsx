@@ -4,8 +4,10 @@ import { useApp } from '../lib/store.jsx'
 export default function AdminPanel() {
   const {
     school, setSchool, adminTeachersList, importExcel, adminLogout, lastImportLabel,
-    isSuperAdmin, currentAdmin, admins, logs, imports, addAdmin, deleteAdmin,
+    isSuperAdmin, currentAdmin, admins, logs, activityLogs, imports, addAdmin, deleteAdmin,
   } = useApp()
+  // Tüm cihazların DB kayıtları varsa onu göster; yoksa yerel kayıtlara düş
+  const allLogs = activityLogs.length > 0 ? activityLogs : logs
   const [name, setName] = useState(school)
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -301,13 +303,14 @@ export default function AdminPanel() {
         {isSuperAdmin && (
           <section className="rounded-2xl bg-white p-4 shadow-sm">
             <h2 className="mb-2 text-sm font-bold text-slate-700">
-              Giriş / Çıkış Kayıtları ({logs.length})
+              Giriş / Çıkış Kayıtları ({allLogs.length})
             </h2>
-            {logs.length === 0 ? (
+            <p className="mb-2 text-xs text-slate-400">Tüm cihazlardan giriş/çıkışlar</p>
+            {allLogs.length === 0 ? (
               <p className="py-3 text-center text-sm text-slate-400">Henüz kayıt yok.</p>
             ) : (
               <ul className="max-h-80 divide-y divide-slate-100 overflow-auto">
-                {logs.map((l, i) => (
+                {allLogs.map((l, i) => (
                   <li key={i} className="flex items-center justify-between gap-2 py-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-800">{l.name}</p>

@@ -76,6 +76,7 @@ export function AppProvider({ children }) {
   const [admins, setAdmins]     = useState(() => readJSON(ADMINS_KEY, DEFAULT_ADMINS))
   const [adminId, setAdminId]   = useState(() => localStorage.getItem(ADMIN_KEY))
   const [logs, setLogs]         = useState(() => readJSON(LOGS_KEY, []))
+  const [activityLogs, setActivityLogs] = useState([]) // tüm cihazlar (DB) — süper admin
   const [imports, setImports]   = useState(() => readJSON(IMPORTS_KEY, []))
   const [adminTeachersList, setAdminTeachersList] = useState([])
 
@@ -146,6 +147,9 @@ export function AppProvider({ children }) {
         }))
         .sort((a, b) => a.name.localeCompare(b.name, 'tr')),
     )
+
+    // Tüm cihaz giriş/çıkış kayıtlarını yükle (süper admin görüntüler)
+    loadActivityLogs()
   }
 
   // ---- adminSupabase oturumunu sağla (varsa kullan, yoksa yenile) ----
@@ -531,10 +535,27 @@ export function AppProvider({ children }) {
     }
   }
   function persistAdmins(next)   { setAdmins(next); localStorage.setItem(ADMINS_KEY, JSON.stringify(next)) }
-  function addLog(name, role, action) {
+  // client: hangi Supabase oturumuyla yazılacağı (öğretmen → supabase, admin → adminSupabase)
+  function addLog(name, role, action, client = supabase) {
     const cur = readJSON(LOGS_KEY, [])
     const next = [{ ts: new Date().toISOString(), name, role, action }, ...cur].slice(0, 300)
     setLogs(next); localStorage.setItem(LOGS_KEY, JSON.stringify(next))
+    // DB'ye de yaz: süper admin tüm cihazların giriş/çıkışını görebilsin
+    client
+      .from('activity_logs')
+      .insert({ name, role, action })
+      .then(({ error }) => error && console.warn('activity log:', error.message))
+  }
+
+  // ---- tüm cihaz giriş/çıkış kayıtlarını DB'den yükle (admin) ----
+  async function loadActivityLogs() {
+    const { data, error } = await adminSupabase
+      .from('activity_logs')
+      .select('*')
+      .order('ts', { ascending: false })
+      .limit(300)
+    if (error) { console.warn('activity logs yükleme:', error.message); return }
+    setActivityLogs(data || [])
   }
 
   function toggleControl(businessId) {
@@ -595,13 +616,13 @@ export function AppProvider({ children }) {
     localStorage.setItem(ADMINS_KEY, JSON.stringify(allAdmins))
     localStorage.setItem(ADMIN_KEY, a.id)
     setAdminId(a.id)
-    addLog(a.username, a.role === 'super' ? 'Süper Admin' : 'Admin', 'Giriş')
+    addLog(a.username, a.role === 'super' ? 'Süper Admin' : 'Admin', 'Giriş', adminSupabase)
     await loadAdminData()
     return { ok: true }
   }
   async function adminLogout() {
     const a = admins.find((x) => x.id === adminId)
-    if (a) addLog(a.username, a.role === 'super' ? 'Süper Admin' : 'Admin', 'Çıkış')
+    if (a) addLog(a.username, a.role === 'super' ? 'Süper Admin' : 'Admin', 'Çıkış', adminSupabase)
     await adminSupabase.auth.signOut()
     localStorage.removeItem(ADMIN_KEY)
     setAdminId(null)
@@ -971,6 +992,7 @@ export function AppProvider({ children }) {
     currentAdmin,
     admins,
     logs,
+    activityLogs,
     imports,
     adminTeachersList,
     login,
